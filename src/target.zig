@@ -23,7 +23,11 @@ pub fn osRequiresLibC(target: std.Target) bool {
     return target.os.requiresLibC();
 }
 
-pub fn libcNeedsLibUnwind(target: std.Target) bool {
+pub fn libCNeedsLibUnwind(target: std.Target, link_mode: std.builtin.LinkMode) bool {
+    return target.isGnuLibC() and link_mode == .static;
+}
+
+pub fn libCxxNeedsLibUnwind(target: std.Target) bool {
     return switch (target.os.tag) {
         .macos,
         .ios,
@@ -136,7 +140,6 @@ pub fn hasLlvmSupport(target: std.Target, ofmt: std.Target.ObjectFormat) bool {
         .goff,
         .hex,
         .macho,
-        .nvptx,
         .spirv,
         .raw,
         .wasm,
@@ -195,6 +198,7 @@ pub fn hasLlvmSupport(target: std.Target, ofmt: std.Target.ObjectFormat) bool {
 
         // No LLVM backend exists.
         .kalimba,
+        .or1k,
         .propeller,
         => false,
     };
@@ -310,6 +314,33 @@ pub fn defaultCompilerRtOptimizeMode(target: std.Target) std.builtin.OptimizeMod
         return .ReleaseSmall;
     } else {
         return .ReleaseFast;
+    }
+}
+
+pub fn canBuildLibCompilerRt(target: std.Target, use_llvm: bool, have_llvm: bool) bool {
+    switch (target.os.tag) {
+        .plan9 => return false,
+        else => {},
+    }
+    switch (target.cpu.arch) {
+        .spirv, .spirv32, .spirv64 => return false,
+        // Remove this once https://github.com/ziglang/zig/issues/23714 is fixed
+        .amdgcn => return false,
+        else => {},
+    }
+    return switch (zigBackend(target, use_llvm)) {
+        .stage2_llvm => true,
+        .stage2_x86_64 => if (target.ofmt == .elf or target.ofmt == .macho) true else have_llvm,
+        else => have_llvm,
+    };
+}
+
+pub fn canBuildLibUbsanRt(target: std.Target) bool {
+    switch (target.cpu.arch) {
+        .spirv, .spirv32, .spirv64 => return false,
+        // Remove this once https://github.com/ziglang/zig/issues/23715 is fixed
+        .nvptx, .nvptx64 => return false,
+        else => return true,
     }
 }
 
